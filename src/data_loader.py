@@ -74,22 +74,49 @@ def load_yacht_data(data_path: Optional[str] = None) -> Tuple[np.ndarray, np.nda
         raise RuntimeError(f"Error loading yacht data: {e}")
 
 
-def load_california_housing(sample_fraction: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
+def load_california_housing(data_path: Optional[str] = None, sample_fraction: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Load California Housing dataset from sklearn
+    Load California Housing dataset from local CSV file
     
     Args:
+        data_path: Path to housing.csv file
         sample_fraction: Fraction of data to sample (for computational efficiency)
     
     Returns:
         Tuple of (X, y) where X is features and y is target
     """
+    if data_path is None:
+        # Default path relative to this file
+        current_dir = Path(__file__).parent
+        data_path = current_dir / "dataset" / "housing.csv"
+    
     try:
-        from sklearn.datasets import fetch_california_housing
+        # Load data from CSV
+        data = pd.read_csv(data_path)
         
-        # Load full dataset
-        data = fetch_california_housing()
-        X, y = data.data, data.target
+        # Handle categorical feature (ocean_proximity) by converting to numeric
+        if 'ocean_proximity' in data.columns:
+            # Convert categorical to numeric using label encoding
+            proximity_mapping = {
+                'NEAR BAY': 0,
+                'NEAR OCEAN': 1, 
+                'INLAND': 2,
+                '<1H OCEAN': 3,
+                'ISLAND': 4
+            }
+            data['ocean_proximity'] = data['ocean_proximity'].map(proximity_mapping)
+        
+        # Features: all columns except median_house_value (target)
+        feature_columns = [col for col in data.columns if col != 'median_house_value']
+        X = data[feature_columns].values
+        y = data['median_house_value'].values
+        
+        # Handle missing values if any
+        if np.any(pd.isna(X)) or np.any(pd.isna(y)):
+            # Remove rows with missing values
+            mask = ~(np.any(pd.isna(X), axis=1) | pd.isna(y))
+            X = X[mask]
+            y = y[mask]
         
         # Sample if requested
         if sample_fraction < 1.0:
@@ -100,8 +127,8 @@ def load_california_housing(sample_fraction: float = 1.0) -> Tuple[np.ndarray, n
         
         return X, y
     
-    except ImportError:
-        raise ImportError("sklearn is required to load California Housing dataset")
+    except FileNotFoundError:
+        raise FileNotFoundError(f"California Housing data file not found at {data_path}")
     except Exception as e:
         raise RuntimeError(f"Error loading California Housing data: {e}")
 
@@ -195,10 +222,10 @@ def get_dataset_info() -> dict:
             'description': 'Yacht hull resistance prediction'
         },
         'california': {
-            'name': 'California Housing (sklearn)',
+            'name': 'California Housing (local CSV)',
             'n_samples': 20640,
-            'n_features': 8,
-            'description': 'California housing prices'
+            'n_features': 9,
+            'description': 'California housing prices from local CSV file'
         }
     }
 
@@ -226,7 +253,7 @@ class DataLoader:
         elif name == 'yacht':
             X, y = load_yacht_data(kwargs.get('data_path'))
         elif name == 'california':
-            X, y = load_california_housing(kwargs.get('sample_fraction', 1.0))
+            X, y = load_california_housing(kwargs.get('data_path'), kwargs.get('sample_fraction', 1.0))
         else:
             raise ValueError(f"Unknown dataset: {name}")
         

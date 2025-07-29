@@ -11,8 +11,9 @@ import numpy as np
 sys.path.append(str(Path(__file__).parent))
 
 try:
-    from loss_functions import CHHLoss, estimate_scale, get_default_parameters
+    from loss_functions import CHHLoss, WelschLoss, estimate_scale, get_default_parameters
     from optimizer import CHHRegressor
+    from mcc_regressor import MCCRegressor
     from utils import generate_synthetic_data, validate_input_data
     print("✓ All modules imported successfully")
 except ImportError as e:
@@ -21,23 +22,33 @@ except ImportError as e:
 
 
 def test_loss_functions():
-    """Test CHH loss function implementation"""
+    """Test CHH and MCC loss function implementations"""
     print("\n=== Testing Loss Functions ===")
     
     # Test CHH loss
     chh = CHHLoss(delta=1.345, sigma=1.0, beta=1.0)
     
+    # Test Welsch/MCC loss
+    welsch = WelschLoss(sigma=1.0)
+    
     # Test with sample residuals
     r = np.array([-3, -1, 0, 1, 3])
     
-    loss_values = chh.loss(r)
-    psi_values = chh.psi(r)
-    weights = chh.weights(r)
+    chh_loss_values = chh.loss(r)
+    chh_psi_values = chh.psi(r)
+    chh_weights = chh.weights(r)
+    
+    welsch_loss_values = welsch.loss(r)
+    welsch_psi_values = welsch.psi(r)
+    welsch_weights = welsch.weights(r)
     
     print(f"Residuals: {r}")
-    print(f"Loss values: {loss_values}")
-    print(f"Psi values: {psi_values}")
-    print(f"Weights: {weights}")
+    print(f"CHH Loss values: {chh_loss_values}")
+    print(f"CHH Psi values: {chh_psi_values}")
+    print(f"CHH Weights: {chh_weights}")
+    print(f"Welsch/MCC Loss values: {welsch_loss_values}")
+    print(f"Welsch/MCC Psi values: {welsch_psi_values}")
+    print(f"Welsch/MCC Weights: {welsch_weights}")
     
     # Test scale estimation
     residuals = np.random.normal(0, 2, 100)
@@ -72,16 +83,29 @@ def test_synthetic_data():
     chh.fit(X, y)
     
     print(f"CHH fitting completed in {chh.n_iter_} iterations")
-    print(f"Estimated coefficients: {chh.coef_}")
-    print(f"Intercept: {chh.intercept_:.4f}")
+    print(f"CHH estimated coefficients: {chh.coef_}")
+    print(f"CHH intercept: {chh.intercept_:.4f}")
+    
+    # Fit MCC regressor
+    mcc = MCCRegressor(sigma=1.0, max_iter=20, tol=1e-4)
+    mcc.fit(X, y)
+    
+    print(f"MCC fitting completed in {mcc.n_iter_} iterations")
+    print(f"MCC estimated coefficients: {mcc.coef_}")
+    print(f"MCC intercept: {mcc.intercept_:.4f}")
     
     # Make predictions
-    y_pred = chh.predict(X)
-    rmse = np.sqrt(np.mean((y - y_pred)**2))
-    mae = np.mean(np.abs(y - y_pred))
+    y_pred_chh = chh.predict(X)
+    y_pred_mcc = mcc.predict(X)
     
-    print(f"Training RMSE: {rmse:.4f}")
-    print(f"Training MAE: {mae:.4f}")
+    rmse_chh = np.sqrt(np.mean((y - y_pred_chh)**2))
+    mae_chh = np.mean(np.abs(y - y_pred_chh))
+    
+    rmse_mcc = np.sqrt(np.mean((y - y_pred_mcc)**2))
+    mae_mcc = np.mean(np.abs(y - y_pred_mcc))
+    
+    print(f"CHH Training RMSE: {rmse_chh:.4f}, MAE: {mae_chh:.4f}")
+    print(f"MCC Training RMSE: {rmse_mcc:.4f}, MAE: {mae_mcc:.4f}")
     
     print("✓ Synthetic data test passed")
 

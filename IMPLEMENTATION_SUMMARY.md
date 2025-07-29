@@ -151,6 +151,7 @@ y_pred = chh.predict(X)
 - **靈活性**：參數可調，適應不同數據特性
 
 ## 文件結構
+
 ```
 CHH-Regression/
 ├── src/
@@ -170,5 +171,3 @@ CHH-Regression/
 
 總計：~800 行高質量 Python 代碼
 ```
-
-此實現完全符合論文要求，提供了一個可工作、可擴展、可維護的 CHH-Regression 系統。

@@ -55,7 +55,7 @@ def plot_loss_functions(
     # Loss functions
     ax1.plot(r, mse_loss, 'b--', label='MSE', linewidth=2)
     ax1.plot(r, huber_loss, 'g-', label='Huber', linewidth=2)
-    ax1.plot(r, corr_loss, 'r:', label='Correntropy', linewidth=2)
+    ax1.plot(r, corr_loss, 'r:', label='Welsch/MCC', linewidth=2)
     ax1.plot(r, chh_loss, 'orange', label=f'CHH (β={beta})', linewidth=3)
     ax1.set_xlabel('Residual')
     ax1.set_ylabel('Loss')
@@ -71,7 +71,7 @@ def plot_loss_functions(
     
     ax2.plot(r, mse_psi, 'b--', label='MSE', linewidth=2)
     ax2.plot(r, huber_psi, 'g-', label='Huber', linewidth=2)
-    ax2.plot(r, corr_psi, 'r:', label='Correntropy', linewidth=2)
+    ax2.plot(r, corr_psi, 'r:', label='Welsch/MCC', linewidth=2)
     ax2.plot(r, chh_psi, 'orange', label=f'CHH (β={beta})', linewidth=3)
     ax2.set_xlabel('Residual')
     ax2.set_ylabel('Influence Function ψ(r)')
@@ -258,6 +258,11 @@ def plot_parameter_sensitivity(
     """
     import pandas as pd
     
+    # Check if we have any results
+    if not sensitivity_results:
+        print("⚠️  No sensitivity results to plot - all parameter combinations failed")
+        return
+    
     df = pd.DataFrame(sensitivity_results)
     
     # Create subplots for each parameter
@@ -270,19 +275,30 @@ def plot_parameter_sensitivity(
     axes[0].set_ylabel('MAE')
     axes[0].set_title('Sensitivity to β Parameter')
     axes[0].grid(True, alpha=0.3)
+    axes[0].set_xscale('log')  # Log scale for beta since values are small
     
-    # Delta sensitivity
-    delta_df = df.groupby('delta')['mean_score'].mean().reset_index()
-    axes[1].plot(delta_df['delta'], -delta_df['mean_score'], 'o-', linewidth=2, markersize=6)
-    axes[1].set_xlabel('δ (Delta)')
+    # Delta sensitivity (using delta_scale)
+    if 'delta_scale' in df.columns:
+        delta_df = df.groupby('delta_scale')['mean_score'].mean().reset_index()
+        axes[1].plot(delta_df['delta_scale'], -delta_df['mean_score'], 'o-', linewidth=2, markersize=6)
+        axes[1].set_xlabel('δ/σ̂ (Delta Scale)')
+    else:
+        delta_df = df.groupby('delta')['mean_score'].mean().reset_index()
+        axes[1].plot(delta_df['delta'], -delta_df['mean_score'], 'o-', linewidth=2, markersize=6)
+        axes[1].set_xlabel('δ (Delta)')
     axes[1].set_ylabel('MAE')
     axes[1].set_title('Sensitivity to δ Parameter')
     axes[1].grid(True, alpha=0.3)
     
-    # Sigma sensitivity
-    sigma_df = df.groupby('sigma')['mean_score'].mean().reset_index()
-    axes[2].plot(sigma_df['sigma'], -sigma_df['mean_score'], 'o-', linewidth=2, markersize=6)
-    axes[2].set_xlabel('σ (Sigma)')
+    # Sigma sensitivity (using sigma_scale)
+    if 'sigma_scale' in df.columns:
+        sigma_df = df.groupby('sigma_scale')['mean_score'].mean().reset_index()
+        axes[2].plot(sigma_df['sigma_scale'], -sigma_df['mean_score'], 'o-', linewidth=2, markersize=6)
+        axes[2].set_xlabel('σ/σ̂ (Sigma Scale)')
+    else:
+        sigma_df = df.groupby('sigma')['mean_score'].mean().reset_index()
+        axes[2].plot(sigma_df['sigma'], -sigma_df['mean_score'], 'o-', linewidth=2, markersize=6)
+        axes[2].set_xlabel('σ (Sigma)')
     axes[2].set_ylabel('MAE')
     axes[2].set_title('Sensitivity to σ Parameter')
     axes[2].grid(True, alpha=0.3)

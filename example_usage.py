@@ -11,6 +11,7 @@ import numpy as np
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from optimizer import CHHRegressor
+from mcc_regressor import MCCRegressor
 from data_loader import DataLoader
 from evaluation import compute_metrics
 from utils import generate_synthetic_data
@@ -60,8 +61,8 @@ def basic_example():
 
 
 def comparison_example():
-    """Compare CHH with different beta values"""
-    print("\n=== Comparison of Different Beta Values ===\n")
+    """Compare CHH with MCC and different beta values"""
+    print("\n=== Comparison of CHH, MCC and Different Beta Values ===\n")
     
     # Generate data
     X, y, _ = generate_synthetic_data(
@@ -71,10 +72,20 @@ def comparison_example():
         random_state=123
     )
     
-    beta_values = [0.0, 0.5, 1.0, 2.0]  # 0.0 = pure Huber
+    print(f"{'Method':<15} {'RMSE':<8} {'MAE':<8} {'R²':<8} {'Iterations':<12}")
+    print("-" * 65)
     
-    print(f"{'Beta':<6} {'RMSE':<8} {'MAE':<8} {'R²':<8} {'Iterations':<12}")
-    print("-" * 50)
+    # Test MCC regressor
+    mcc = MCCRegressor(sigma=1.0, max_iter=30)
+    mcc.fit(X, y)
+    y_pred_mcc = mcc.predict(X)
+    metrics_mcc = compute_metrics(y, y_pred_mcc)
+    
+    print(f"{'MCC':<15} {metrics_mcc['rmse']:<8.4f} {metrics_mcc['mae']:<8.4f} "
+          f"{metrics_mcc['r2']:<8.4f} {mcc.n_iter_:<12}")
+    
+    # Test CHH with different beta values
+    beta_values = [0.0, 0.5, 1.0, 2.0]  # 0.0 = pure Huber
     
     for beta in beta_values:
         chh = CHHRegressor(beta=beta, max_iter=30)
@@ -83,7 +94,8 @@ def comparison_example():
         y_pred = chh.predict(X)
         metrics = compute_metrics(y, y_pred)
         
-        print(f"{beta:<6.1f} {metrics['rmse']:<8.4f} {metrics['mae']:<8.4f} "
+        method_name = f"CHH (β={beta})"
+        print(f"{method_name:<15} {metrics['rmse']:<8.4f} {metrics['mae']:<8.4f} "
               f"{metrics['r2']:<8.4f} {chh.n_iter_:<12}")
 
 

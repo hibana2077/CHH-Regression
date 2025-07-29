@@ -113,15 +113,23 @@ class RegressionBenchmark:
         """Create dictionary of estimators to compare"""
         try:
             from .optimizer import CHHRegressor
+            from .mcc_regressor import MCCRegressor
         except ImportError:
             from optimizer import CHHRegressor
+            from mcc_regressor import MCCRegressor
         
         estimators = {
             'OLS': LinearRegression(),
             'Huber': HuberRegressor(epsilon=1.35, max_iter=100),
-            'CHH_beta0.5': CHHRegressor(beta=0.5, max_iter=100),
-            'CHH_beta1.0': CHHRegressor(beta=1.0, max_iter=100),
-            'CHH_beta2.0': CHHRegressor(beta=2.0, max_iter=100),
+            'MCC_sigma0.6': MCCRegressor(sigma=0.6, max_iter=100),
+            'MCC_sigma0.8': MCCRegressor(sigma=0.8, max_iter=100),  
+            'MCC_sigma1.0': MCCRegressor(sigma=1.0, max_iter=100),
+            'CHH_beta8.0_sigma0.2': CHHRegressor(beta=8.0, max_iter=100, sigma=0.2),
+            'CHH_beta8.0_sigma0.4': CHHRegressor(beta=8.0, max_iter=100, sigma=0.4),
+            'CHH_beta8.0_sigma1.0': CHHRegressor(beta=8.0, max_iter=100, sigma=1.0),
+            'CHH_beta12.0_sigma0.2': CHHRegressor(beta=12.0, max_iter=100, sigma=0.2),
+            'CHH_beta12.0_sigma0.4': CHHRegressor(beta=12.0, max_iter=100, sigma=0.4),
+            'CHH_beta12.0_sigma1.0': CHHRegressor(beta=12.0, max_iter=100, sigma=1.0),
         }
         
         return estimators
@@ -235,10 +243,11 @@ class RegressionBenchmark:
 def parameter_sensitivity_analysis(
     X: np.ndarray,
     y: np.ndarray,
-    delta_range: List[float] = [0.8, 1.0, 1.345, 1.5, 2.0],
-    sigma_range: List[float] = [0.8, 1.0, 1.2, 1.5],
-    beta_range: List[float] = [0.2, 0.5, 1.0, 2.0],
-    cv_folds: int = 3
+    delta_range: List[float] = [1.345, 1.6, 2.0],
+    sigma_range: List[float] = [0.5, 0.7, 1.0, 1.2],
+    beta_range: List[float] = [0.02, 0.05, 0.1, 0.2],
+    cv_folds: int = 3,
+    scoring: str = 'neg_mean_absolute_error'
 ) -> Dict[str, Any]:
     """
     Analyze sensitivity to CHH parameters
@@ -246,47 +255,164 @@ def parameter_sensitivity_analysis(
     Args:
         X: Feature matrix
         y: Target vector
-        delta_range: Range of delta values to test
-        sigma_range: Range of sigma values to test  
+        delta_range: Range of delta values to test (as multiples of sigma_hat)
+        sigma_range: Range of sigma values to test (as multiples of sigma_hat)
         beta_range: Range of beta values to test
         cv_folds: Number of CV folds
+        scoring: CV scoring metric ('neg_mean_absolute_error' or 'neg_mean_squared_error')
     
     Returns:
         Parameter sensitivity results
     """
     try:
         from .optimizer import CHHRegressor
+        from .loss_functions import get_default_parameters
     except ImportError:
         from optimizer import CHHRegressor
+        from loss_functions import get_default_parameters
     from sklearn.model_selection import cross_val_score
+    from sklearn.linear_model import LinearRegression
+    
+    # Estimate sigma_hat from OLS residuals for parameter scaling
+    ols = LinearRegression()
+    ols.fit(X, y)
+    ols_residuals = y - ols.predict(X)
+    _, sigma_hat, _ = get_default_parameters(ols_residuals)
     
     results = []
+    print(f"Using sigma_hat = {sigma_hat:.4f} for parameter scaling")
+    print(f"Testing {len(delta_range) * len(sigma_range) * len(beta_range)} parameter combinations...")
     
-    for delta in delta_range:
-        for sigma in sigma_range:
+    total_combinations = len(delta_range) * len(sigma_range) * len(beta_range)
+    failed_count = 0
+    
+    for delta_scale in delta_range:
+        for sigma_scale in sigma_range:
             for beta in beta_range:
                 try:
+                    # Scale parameters by sigma_hat
+                    delta_actual = delta_scale * sigma_hat
+                    sigma_actual = sigma_scale * sigma_hat
+                    
+                    print(f"Testing: δ={delta_actual:.4f}, σ={sigma_actual:.4f}, β={beta}")
+                    
                     estimator = CHHRegressor(
-                        delta=delta, sigma=sigma, beta=beta, max_iter=50
+                        delta=delta_actual, sigma=sigma_actual, beta=beta, 
+                        max_iter=50, init_method='huber'
                     )
                     
-                    # Use negative MAE as score (higher is better)
+                    # Use MAE as default scoring (better for robustness evaluation)
                     scores = cross_val_score(
                         estimator, X, y, 
                         cv=cv_folds, 
-                        scoring='neg_mean_absolute_error'
+                        scoring=scoring
                     )
                     
                     results.append({
-                        'delta': delta,
-                        'sigma': sigma, 
+                        'delta_scale': delta_scale,
+                        'sigma_scale': sigma_scale,
+                        'delta_actual': delta_actual,
+                        'sigma_actual': sigma_actual,
                         'beta': beta,
                         'mean_score': np.mean(scores),
-                        'std_score': np.std(scores)
+                        'std_score': np.std(scores),
+                        'sigma_hat': sigma_hat
                     })
+                    print(f"  ✓ Success: MAE = {-np.mean(scores):.4f}")
                     
                 except Exception as e:
-                    warnings.warn(f"Failed for delta={delta}, sigma={sigma}, beta={beta}: {e}")
+                    failed_count += 1
+                    print(f"  ✗ Failed: {e}")
+                    warnings.warn(f"Failed for delta_scale={delta_scale}, sigma_scale={sigma_scale}, beta={beta}: {e}")
+    
+    print(f"Completed: {len(results)}/{total_combinations} successful, {failed_count} failed")
+    
+    return results
+
+
+def compare_regressors(
+    X: np.ndarray,
+    y: np.ndarray,
+    test_size: float = 0.2,
+    contamination_rates: List[float] = [0.0, 0.05, 0.1, 0.2],
+    outlier_magnitude: float = 8.0,
+    random_state: Optional[int] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compare multiple robust regression methods
+    
+    Args:
+        X: Feature matrix
+        y: Target vector
+        test_size: Test set proportion
+        contamination_rates: List of contamination rates to test
+        outlier_magnitude: Magnitude of outliers (in MAD units)
+        random_state: Random seed
+        
+    Returns:
+        Dictionary with results for each method and contamination rate
+    """
+    try:
+        from .optimizer import CHHRegressor
+        from .mcc_regressor import MCCRegressor
+        from .utils import add_outliers, estimate_scale
+    except ImportError:
+        from optimizer import CHHRegressor
+        from mcc_regressor import MCCRegressor
+        from utils import add_outliers, estimate_scale
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+    
+    # Estimate scale for parameter setting
+    initial_residuals = y_train - np.mean(y_train)
+    scale = estimate_scale(initial_residuals, method='mad')
+    
+    # Create regressors
+    regressors = {
+        'OLS': LinearRegression(),
+        'Huber': HuberRegressor(epsilon=1.35, max_iter=100),
+        'MCC': MCCRegressor(sigma=scale, max_iter=100),
+        'CHH': CHHRegressor(
+            delta=1.345*scale, 
+            sigma=scale, 
+            beta=1.0, 
+            max_iter=100
+        )
+    }
+    
+    results = {}
+    
+    for name, regressor in regressors.items():
+        results[name] = {}
+        
+        for contamination in contamination_rates:
+            # Add outliers to training data
+            y_train_cont = add_outliers(
+                y_train.copy(), 
+                contamination_rate=contamination,
+                outlier_magnitude=outlier_magnitude * scale,
+                random_state=random_state
+            )
+            
+            try:
+                # Fit regressor
+                regressor.fit(X_train, y_train_cont)
+                
+                # Predict on clean test set
+                y_pred = regressor.predict(X_test)
+                
+                # Compute metrics
+                metrics = compute_metrics(y_test, y_pred)
+                results[name][f'contamination_{contamination}'] = metrics
+                
+            except Exception as e:
+                warnings.warn(f"Failed to fit {name} with contamination {contamination}: {e}")
+                results[name][f'contamination_{contamination}'] = {
+                    'mae': np.inf, 'rmse': np.inf, 'r2': -np.inf
+                }
     
     return results
 

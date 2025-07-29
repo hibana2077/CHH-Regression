@@ -103,6 +103,42 @@ def estimate_scale(residuals: np.ndarray, method: str = 'mad') -> float:
         raise ValueError(f"Unknown scale estimation method: {method}")
 
 
+class WelschLoss:
+    """
+    Welsch/MCC (Maximum Correntropy Criterion) Loss Function
+    
+    Implements correntropy-induced loss: rho(r) = 1 - exp(-r^2 / (2*sigma^2))
+    This is equivalent to Welsch M-estimator and MCC objective.
+    """
+    
+    def __init__(self, sigma: float = 1.0):
+        """
+        Initialize Welsch/MCC loss parameters
+        
+        Args:
+            sigma: Correntropy kernel width (scale parameter)
+        """
+        self.sigma = sigma
+    
+    def loss(self, r: np.ndarray) -> np.ndarray:
+        """Compute Welsch/MCC loss"""
+        return 1 - np.exp(-r**2 / (2 * self.sigma**2))
+    
+    def psi(self, r: np.ndarray) -> np.ndarray:
+        """
+        Compute influence function (derivative of loss)
+        psi(r) = (r/sigma^2) * exp(-r^2 / (2*sigma^2))
+        """
+        return (r / self.sigma**2) * np.exp(-r**2 / (2 * self.sigma**2))
+    
+    def weights(self, r: np.ndarray) -> np.ndarray:
+        """
+        Compute IRLS weights for Welsch/MCC loss
+        w(r) = exp(-r^2 / (2*sigma^2))
+        """
+        return np.exp(-r**2 / (2 * self.sigma**2))
+
+
 def get_default_parameters(initial_residuals: np.ndarray) -> Tuple[float, float, float]:
     """
     Get default CHH parameters based on initial residuals

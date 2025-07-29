@@ -27,7 +27,8 @@ class CHHRegressor:
         beta: float = 1.0,
         max_iter: int = 100,
         tol: float = 1e-6,
-        fit_intercept: bool = True
+        fit_intercept: bool = True,
+        init_method: str = 'huber'
     ):
         """
         Initialize CHH Regressor
@@ -39,6 +40,7 @@ class CHHRegressor:
             max_iter: Maximum number of iterations
             tol: Convergence tolerance
             fit_intercept: Whether to fit intercept term
+            init_method: Initialization method ('ols', 'huber', 'zero')
         """
         self.delta = delta
         self.sigma = sigma
@@ -46,6 +48,7 @@ class CHHRegressor:
         self.max_iter = max_iter
         self.tol = tol
         self.fit_intercept = fit_intercept
+        self.init_method = init_method
         
         # Will be set during fitting
         self.coef_ = None
@@ -59,7 +62,25 @@ class CHHRegressor:
         return np.column_stack([np.ones(X.shape[0]), X])
     
     def _initial_fit(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
-        """Get initial coefficient estimates using OLS"""
+        """Get initial coefficient estimates using specified method"""
+        if self.init_method == 'huber':
+            try:
+                from sklearn.linear_model import HuberRegressor
+                huber = HuberRegressor(fit_intercept=False, max_iter=100)
+                huber.fit(X, y)
+                return huber.coef_
+            except Exception:
+                warnings.warn("Huber initialization failed, falling back to OLS")
+                return self._ols_init(X, y)
+        elif self.init_method == 'ols':
+            return self._ols_init(X, y)
+        elif self.init_method == 'zero':
+            return np.zeros(X.shape[1])
+        else:
+            raise ValueError(f"Unknown initialization method: {self.init_method}")
+    
+    def _ols_init(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """OLS initialization"""
         try:
             return np.linalg.lstsq(X, y, rcond=None)[0]
         except np.linalg.LinAlgError:
@@ -232,6 +253,43 @@ class CHHRegressor:
             return np.sqrt(np.mean((y - y_pred) ** 2))
         else:
             raise ValueError(f"Unknown metric: {metric}")
+    
+    def get_params(self, deep=True):
+        """
+        Get parameters for this estimator (sklearn compatibility)
+        
+        Args:
+            deep: If True, return parameters for sub-estimators too
+            
+        Returns:
+            Dictionary of parameter names and values
+        """
+        return {
+            'delta': self.delta,
+            'sigma': self.sigma,
+            'beta': self.beta,
+            'max_iter': self.max_iter,
+            'tol': self.tol,
+            'fit_intercept': self.fit_intercept,
+            'init_method': self.init_method
+        }
+    
+    def set_params(self, **params):
+        """
+        Set the parameters of this estimator (sklearn compatibility)
+        
+        Args:
+            **params: Parameter names and values
+            
+        Returns:
+            self
+        """
+        for param, value in params.items():
+            if hasattr(self, param):
+                setattr(self, param, value)
+            else:
+                raise ValueError(f"Invalid parameter {param} for estimator {type(self).__name__}")
+        return self
 
 
 def huber_regression(X: np.ndarray, y: np.ndarray, **kwargs) -> CHHRegressor:

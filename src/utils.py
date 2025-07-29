@@ -323,6 +323,49 @@ def validate_input_data(X: np.ndarray, y: np.ndarray) -> None:
         raise ValueError("Data contains infinite values")
 
 
+def add_outliers(
+    y: np.ndarray,
+    contamination_rate: float = 0.1,
+    outlier_magnitude: float = 5.0,
+    random_state: Optional[int] = None
+) -> np.ndarray:
+    """
+    Add outliers to target array
+    
+    Args:
+        y: Original target array
+        contamination_rate: Fraction of outliers to add
+        outlier_magnitude: Magnitude of outliers (in standard deviations)
+        random_state: Random seed for reproducibility
+    
+    Returns:
+        Target array with added outliers
+    """
+    if random_state is not None:
+        np.random.seed(random_state)
+    
+    y_contaminated = y.copy()
+    n_samples = len(y)
+    n_outliers = int(n_samples * contamination_rate)
+    
+    if n_outliers > 0:
+        # Select random indices for outliers
+        outlier_indices = np.random.choice(n_samples, n_outliers, replace=False)
+        
+        # Estimate scale
+        scale = mad_scale_estimate(y - np.median(y))
+        if scale == 0:
+            scale = np.std(y)
+        
+        # Add outliers with random signs
+        outlier_signs = np.random.choice([-1, 1], n_outliers)
+        outlier_values = outlier_signs * outlier_magnitude * scale
+        
+        y_contaminated[outlier_indices] += outlier_values
+    
+    return y_contaminated
+
+
 def compute_robust_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
     """
     Compute robust regression metrics

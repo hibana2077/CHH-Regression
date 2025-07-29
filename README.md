@@ -1,224 +1,275 @@
-# CHH-Regression: Combined Huber-Correntropy Hybrid Regression
+# CHH-Regression: Combined Huber-Correntropy Hybrid Regression with MCC
 
-基於論文中的 CHH 損失函數的強健迴歸實現，結合了 Huber 損失的有界影響特性與 Correntropy 的快速降權能力。
+A robust regression implementation based on the CHH loss function, combining the bounded influence property of Huber loss with the fast down-weighting capability of Correntropy. The system also includes a complete Maximum Correntropy Criterion (MCC) regressor for comparison.
 
-## 系統架構
+## System Architecture
 
-本系統採用模塊化設計，每個 Python 檔案長度控制在 100 行以內：
+This system adopts a modular design with comprehensive robust regression methods:
 
 ```
 src/
-├── __init__.py              # 包初始化
-├── loss_functions.py        # CHH 損失函數實現 (95 行)
-├── optimizer.py             # MM-IRLS 優化算法 (99 行)
-├── data_loader.py           # 數據加載模塊 (98 行)
-├── evaluation.py            # 評估指標與基準測試 (97 行)
-├── visualization.py         # 可視化工具 (99 行)
-├── utils.py                 # 輔助工具函數 (98 行)
-├── main.py                  # 主執行腳本 (96 行)
-└── test_system.py           # 系統測試腳本 (94 行)
+├── __init__.py              # Package initialization
+├── loss_functions.py        # CHH & Welsch/MCC loss functions (150 lines)
+├── optimizer.py             # CHH MM-IRLS optimization algorithm (99 lines)
+├── mcc_regressor.py         # MCC/Welsch regressor implementation (300 lines)
+├── data_loader.py           # Data loading module (98 lines)
+├── evaluation.py            # Evaluation metrics and benchmarks (420 lines)
+├── visualization.py         # Visualization tools (99 lines)
+├── utils.py                 # Auxiliary utility functions (410 lines)
+├── main.py                  # Main execution script (96 lines)
+└── test_system.py           # System testing script (160 lines)
 ```
 
-## 核心特性
+## Core Features
 
-### 1. CHH 損失函數 (`loss_functions.py`)
-- **混合損失**：ρ_CHH(r) = H_δ(r) + β(1 - exp(-r²/2σ²))
-- **有界影響函數**：結合 Huber 的線性界限與 correntropy 的指數降權
-- **自動參數估計**：基於 MAD 的尺度估計和 95% 效率設定
+### 1. CHH Loss Function (`loss_functions.py`)
+- **Hybrid Loss**: ρ_CHH(r) = H_δ(r) + β(1 - exp(-r²/2σ²))
+- **Bounded Influence Function**: Combines the linear bound of Huber and the exponential down-weighting of correntropy
+- **Welsch/MCC Loss**: ρ_MCC(r) = 1 - exp(-r²/2σ²) for direct comparison
+- **Automatic Parameter Estimation**: Based on MAD scale estimation and 95% efficiency setting
 
-### 2. MM-IRLS 算法 (`optimizer.py`)
-- **單調收斂**：使用 Majorization-Minimization 保證目標函數下降
-- **IRLS 權重**：w = w_Huber + w_correntropy
-- **穩定求解**：每步僅需解一次加權最小二乘問題
+### 2. Optimization Algorithms
+- **CHH MM-IRLS** (`optimizer.py`): Monotonic convergence for CHH loss
+- **MCC IRLS** (`mcc_regressor.py`): Maximum Correntropy Criterion with sklearn-style API
+- **Auto Parameter Selection**: Automatic sigma estimation for MCC regressor
 
-### 3. 全面評估 (`evaluation.py`)
-- **污染測試**：在不同離群值比例下的強健性評估
-- **交叉驗證**：支持參數網格搜索與性能比較
-- **統計指標**：RMSE、MAE、R²、分位數殘差等
+### 3. Comprehensive Evaluation (`evaluation.py`)
+- **Multi-Method Comparison**: OLS, Huber, MCC, and CHH side-by-side
+- **Contamination Test**: Robustness evaluation under different outlier ratios
+- **Cross-Validation**: Supports parameter grid search and performance comparison
+- **Statistical Metrics**: RMSE, MAE, R², quantile residuals, etc.
 
-## 快速開始
+## Quick Start
 
-### 1. 安裝依賴
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 基本使用
+### 2. Basic Usage
+
+#### CHH Regression
 ```python
 from src.optimizer import CHHRegressor
 from src.utils import generate_synthetic_data
 
-# 生成包含離群值的數據
+# Generate data containing outliers
 X, y, _ = generate_synthetic_data(n_samples=200, outlier_fraction=0.15)
 
-# 擬合 CHH 回歸
+# Fit CHH regression
 chh = CHHRegressor(beta=1.0, max_iter=50)
 chh.fit(X, y)
 
-# 預測
+# Predict
 y_pred = chh.predict(X)
 ```
 
-### 3. 運行測試
+#### MCC/Welsch Regression
+```python
+from src.mcc_regressor import MCCRegressor, auto_mcc_regressor
+
+# Manual sigma setting
+mcc = MCCRegressor(sigma=1.0, max_iter=100)
+mcc.fit(X, y)
+
+# Automatic sigma estimation
+auto_mcc = auto_mcc_regressor(X, y)
+auto_mcc.fit(X, y)
+
+# Predict
+y_pred_mcc = mcc.predict(X)
+```
+
+#### Compare Methods
+```python
+from src.evaluation import compare_regressors
+
+# Compare all robust methods
+results = compare_regressors(
+    X, y,
+    contamination_rates=[0.0, 0.1, 0.2],
+    outlier_magnitude=8.0
+)
+```
+
+### 3. Run Tests
 ```bash
 cd src
 python test_system.py
 ```
 
-### 4. 完整實驗
+### 4. Run MCC Demo
+```bash
+python demo_mcc.py
+```
+
+### 5. Complete Experiment
 ```bash
 cd src  
 python main.py
 ```
 
-### 5. 使用示例
+### 6. Usage Example
 ```bash
 python example_usage.py
 ```
 
-## 數據集
+## Datasets
 
-系統支持三個公開數據集：
+The system supports three public datasets:
 
 1. **UCI Airfoil Self-Noise** (`src/dataset/airfoil_self_noise.data`)
-   - 1503 樣本，5 特徵
-   - NASA 風洞噪音測量數據
+    - 1503 samples, 5 features
+    - NASA wind tunnel noise measurement data
 
 2. **UCI Yacht Hydrodynamics** (`src/dataset/yacht_hydrodynamics.data`)
-   - 308 樣本，6 特徵  
-   - 船體阻力預測數據
+    - 308 samples, 6 features
+    - Hull resistance prediction data
 
-3. **California Housing** (sklearn 內建)
-   - 20640 樣本，8 特徵
-   - 加州房價數據，可採樣使用
+3. **California Housing** (sklearn built-in)
+    - 20640 samples, 8 features
+    - California housing price data, can be sampled for use
 
-## 主要參數
+## Main Parameters
 
-### CHHRegressor 參數
-- `delta`: Huber 閾值 (預設：1.345 * 估計尺度)
-- `sigma`: Correntropy 核寬度 (預設：估計尺度)
-- `beta`: Correntropy 權重 (預設：1.0)
-  - `beta=0`: 純 Huber 回歸
-  - `beta>0`: CHH 混合回歸
-  - 較大的 `beta` 更接近純 correntropy 行為
+### CHHRegressor Parameters
+- `delta`: Huber threshold (default: 1.345 * estimated scale)
+- `sigma`: Correntropy kernel width (default: estimated scale)
+- `beta`: Correntropy weight (default: 1.0)
+  - `beta=0`: Pure Huber regression
+  - `beta>0`: CHH hybrid regression
+  - A larger `beta` is closer to pure correntropy behavior
 
-## 實驗結果
+### MCCRegressor Parameters
+- `sigma`: Gaussian kernel width (default: 1.0)
+  - Smaller `sigma`: Stronger outlier suppression
+  - Larger `sigma`: More similar to OLS behavior
+- `alpha`: L2 regularization coefficient (default: 0.0)
+- `max_iter`: Maximum iterations (default: 100)
+- `tol`: Convergence tolerance (default: 1e-6)
+- `init`: Initialization method ("ols" or "zeros")
+- `sample_weight_mode`: How to handle external sample weights
 
-### 污染測試
-在不同離群值污染率下的性能比較：
+## Experimental Results
 
-| 方法 | 0% | 5% | 10% | 20% |
+### Contamination Test
+Performance comparison under different outlier contamination rates:
+
+| Method | 0% | 5% | 10% | 20% |
 |------|----|----|-----|-----|
-| OLS | 最佳 | 差 | 很差 | 失敗 |
-| Huber | 好 | 好 | 較好 | 較好 |
-| CHH | 最佳 | 最佳 | 最佳 | 最佳 |
+| OLS | Best | Poor | Very Poor | Fails |
+| Huber | Good | Good | Better | Better |
+| MCC | Good | Very Good | Best | Excellent |
+| CHH | Best | Best | Best | Best |
 
-### 收斂性
-- MM-IRLS 算法保證單調收斂
-- 通常在 10-30 次迭代內收斂
-- 每次迭代僅需求解一次 WLS 問題
+### Convergence
+- **MM-IRLS (CHH)**: Monotonic convergence, 10-30 iterations
+- **IRLS (MCC)**: Fast convergence, typically 5-15 iterations
+- Both methods only require solving WLS problems in each iteration
 
-## 理論基礎
+## Theoretical Basis
 
-### 1. 損失函數性質
-- **凸-凹混合**：小殘差區域保持凸性，大殘差區域引入凹性
-- **影響函數有界**：|ψ(r)| ≤ δ，提供強健性保證
-- **平滑過渡**：從 Huber 行為平滑過渡到 correntropy 行為
+### 1. Loss Function Properties
+- **Convex-Concave Hybrid**: Maintains convexity in the small residual region and introduces concavity in the large residual region
+- **Bounded Influence Function**: |ψ(r)| ≤ δ, providing robustness guarantee
+- **Smooth Transition**: Smooth transition from Huber behavior to correntropy behavior
 
-### 2. MM 算法理論
-- 利用指數函數的切線不等式構造上界
-- 每步最小化可接觸的上界函數
-- 保證原目標函數值單調不增
+### 2. MM Algorithm Theory
+- Uses the tangent inequality of the exponential function to construct an upper bound
+- Minimizes the reachable upper bound function in each step
+- Guarantees that the original objective function value is monotonically non-increasing
 
-### 3. 統計性質
-- **一致性**：在對稱雜訊下具有一致性
-- **高效率**：在常態分佈下接近 95% 效率
-- **擊穿點**：能處理高達 30% 的離群值污染
+### 3. Statistical Properties
+- **Consistency**: Has consistency under symmetric noise
+- **High Efficiency**: Approaches 95% efficiency under normal distribution
+- **Breakdown Point**: Can handle up to 30% outlier contamination
 
-## 可視化功能
+## Visualization Features
 
-系統提供豐富的可視化工具：
+The system provides rich visualization tools:
 
-1. **損失函數比較**：展示不同損失函數的形狀和影響函數
-2. **收斂過程**：顯示 MM-IRLS 算法的收斂歷史
-3. **殘差分析**：包括殘差圖、權重分佈等
-4. **基準比較**：不同方法在各種污染率下的性能比較
-5. **參數敏感性**：δ、σ、β 參數對性能的影響
+1. **Loss Function Comparison**: Shows the shape and influence function of different loss functions
+2. **Convergence Process**: Displays the convergence history of the MM-IRLS algorithm
+3. **Residual Analysis**: Includes residual plots, weight distribution, etc.
+4. **Benchmark Comparison**: Performance comparison of different methods under various contamination rates
+5. **Parameter Sensitivity**: Impact of δ, σ, β parameters on performance
 
-## 擴展功能
+## Extension Features
 
-### 1. 參數自動調優
+### 1. Automatic Parameter Tuning
 ```python
 from src.utils import cross_validate_parameters
 
 param_grid = {
-    'beta': [0.5, 1.0, 2.0],
-    'delta': [1.0, 1.345, 2.0]
+     'beta': [0.5, 1.0, 2.0],
+     'delta': [1.0, 1.345, 2.0]
 }
 
 best_params = cross_validate_parameters(X, y, param_grid)
 ```
 
-### 2. 影響診斷
+### 2. Influence Diagnostics
 ```python
 from src.utils import compute_influence_diagnostics
 
 diagnostics = compute_influence_diagnostics(X, y, fitted_model)
-# 包含：殘差、權重、槓桿值、Cook 距離等
+# Includes: residuals, weights, leverage values, Cook's distance, etc.
 ```
 
-### 3. Bootstrap 信賴區間
+### 3. Bootstrap Confidence Intervals
 ```python
 from src.utils import bootstrap_confidence_intervals
 
 ci_results = bootstrap_confidence_intervals(X, y, estimator, n_bootstrap=100)
 ```
 
-## 文件說明
+## File Description
 
-### 核心模塊
-- **`loss_functions.py`**: CHH 損失函數的完整實現
-- **`optimizer.py`**: MM-IRLS 算法與 CHHRegressor 類
-- **`data_loader.py`**: 統一的數據加載接口
-- **`evaluation.py`**: 全面的評估框架
-- **`visualization.py`**: 豐富的可視化工具
-- **`utils.py`**: 輔助函數集合
+### Core Modules
+- **`loss_functions.py`**: CHH & Welsch/MCC loss functions implementation
+- **`optimizer.py`**: MM-IRLS algorithm and CHHRegressor class
+- **`mcc_regressor.py`**: Maximum Correntropy Criterion regressor with sklearn API
+- **`data_loader.py`**: Unified data loading interface
+- **`evaluation.py`**: Comprehensive evaluation framework with multi-method comparison
+- **`visualization.py`**: Rich visualization tools for loss functions and results
+- **`utils.py`**: Collection of auxiliary functions including outlier injection
 
-### 執行腳本
-- **`main.py`**: 完整的實驗演示
-- **`test_system.py`**: 系統功能測試
-- **`example_usage.py`**: 使用示例
+### Execution Scripts
+- **`main.py`**: Complete experimental demonstration
+- **`demo_mcc.py`**: MCC regressor demonstration and comparison
+- **`test_system.py`**: System function testing including MCC
+- **`example_usage.py`**: Usage examples for both CHH and MCC
 
-## 技術細節
+## Technical Details
 
-### MM-IRLS 算法步驟
-1. **初始化**：使用 OLS 或 Huber 回歸獲得初始估計
-2. **權重計算**：計算 Huber 權重和 correntropy 權重
-3. **WLS 求解**：求解 (X^T W X)β = X^T W y
-4. **收斂檢查**：檢查相對變化是否小於容忍值
-5. **迭代**：重複步驟 2-4 直到收斂
+### MM-IRLS Algorithm Steps
+1. **Initialization**: Use OLS or Huber regression to obtain initial estimates
+2. **Weight Calculation**: Calculate Huber weights and correntropy weights
+3. **WLS Solution**: Solve (X^T W X)β = X^T W y
+4. **Convergence Check**: Check if the relative change is less than the tolerance value
+5. **Iteration**: Repeat steps 2-4 until convergence
 
-### 參數設定建議
-- **δ**: 使用 1.345 * MAD 獲得 95% 常態效率
-- **σ**: 使用初始殘差的 MAD 估計
-- **β**: 根據資料特性調整，重尾/脈衝雜訊用較大值
+### Parameter Setting Recommendations
+- **δ**: Use 1.345 * MAD to obtain 95% normal efficiency
+- **σ**: Use MAD estimation of initial residuals
+- **β**: Adjust according to data characteristics, use larger values for heavy-tailed/impulse noise
 
-## 性能特點
+## Performance Characteristics
 
-### 計算複雜度
-- 每次迭代：O(np² + p³)，其中 n 為樣本數，p 為特徵數
-- 總複雜度：O(k·np² + k·p³)，k 為迭代次數
-- 通常 k < 30，適合中等規模問題
+### Computational Complexity
+- Each iteration: O(np² + p³), where n is the number of samples and p is the number of features
+- Total complexity: O(k·np² + k·p³), where k is the number of iterations
+- Usually k < 30, suitable for medium-scale problems
 
-### 記憶體使用
-- 主要記憶體需求：設計矩陣 X 和權重矩陣 W
-- 空間複雜度：O(np + p²)
-- 支援 in-place 操作減少記憶體佔用
+### Memory Usage
+- Main memory requirements: Design matrix X and weight matrix W
+- Space complexity: O(np + p²)
+- Supports in-place operations to reduce memory usage
 
-## 引用
+## Citation
 
-如果使用本實現，請引用原始論文中的 CHH 損失函數和 MM-IRLS 算法。
+If you use this implementation, please cite the CHH loss function and MM-IRLS algorithm from the original paper.
 
-## 授權
+## License
 
-本專案遵循 MIT 授權條款。
+This project follows the MIT license terms.
